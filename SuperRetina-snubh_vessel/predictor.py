@@ -339,16 +339,21 @@ class Predictor:
                 plt.show()
                 plt.close()
             bsp = regist_BSpline(refer_vessel, query_align_vessel)
-            query_align_vessel = bsp.do_registration()
-            merged_bspline[:, :, 2] = query_align_vessel.astype(np.uint8)
+            query_align_vessel_bspline = bsp.do_registration()
             query_align_fundus_bspline = query_align_fundus.copy()
-            query_align_fundus_bspline[:,:,0] = bsp.registrationFromMatrix(query_align_fundus[:,:,0]).astype(np.uint8)
-            query_align_fundus_bspline[:,:,1] = bsp.registrationFromMatrix(query_align_fundus[:,:,1]).astype(np.uint8)
-            query_align_fundus_bspline[:,:,2] = bsp.registrationFromMatrix(query_align_fundus[:,:,2]).astype(np.uint8)
-            return merged, merged_bspline,query_align_fundus
+            query_align_fundus_bspline[:,:,0] = bsp.registrationFromMatrix(query_align_fundus[:,:,0])
+            query_align_fundus_bspline[:,:,1] = bsp.registrationFromMatrix(query_align_fundus[:,:,1])
+            query_align_fundus_bspline[:,:,2] = bsp.registrationFromMatrix(query_align_fundus[:,:,2])
+
+            merged_bspline[:, :, 2] = query_align_vessel.astype(np.uint8)
+            query_align_vessel_bspline = cv2.cvtColor(query_align_vessel_bspline, cv2.COLOR_GRAY2BGR).astype(np.uint8)
+            query_align_vessel = cv2.cvtColor(query_align_vessel, cv2.COLOR_BGR2RGB)
+            query_align_fundus_bspline = cv2.cvtColor(query_align_fundus_bspline, cv2.COLOR_BGR2RGB)
+            query_align_fundus = cv2.cvtColor(query_align_fundus, cv2.COLOR_BGR2RGB)
+            return merged, merged_bspline, query_align_vessel, query_align_fundus, query_align_vessel_bspline, query_align_fundus_bspline
 
         print("Matched Failed!")
-        return None, None, None
+        return None, None, None, None, None, None
 
     def model_run_one_image(self, image_path, save_path=None):
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
@@ -489,6 +494,27 @@ def wide_fp_load():
             vessel_dict[key] = [vessel_path + i.split("/")[-1]]
     return image_path, image_dict, vessel_dict, wide_fp_matched_list, wide_vessel_matched_list
 
+def wide_fp_aux_load():
+    image_path = "./data/Auxiliary/"
+    vessel_path = "./data/Auxiliary_Ves/"
+    wide_fp_matched_path = "./data/Lab/Auxaility/"
+    wide_vessel_matched_path = "./data/Lab_Ves/Auxaility/"
+    image_dict = {}
+    vessel_dict = {}
+    image_list = sorted(glob.glob(image_path + "*.png"))
+    wide_fp_matched_list = sorted(glob.glob(wide_fp_matched_path + "*.png"))
+    wide_vessel_matched_list = sorted(glob.glob(wide_vessel_matched_path + "*.png"))
+    image_list = sorted(glob.glob(image_path + "*.png"))
+    for i in image_list:
+        key = i.split("/")[-1].split("_")[0]
+        if key in image_dict:
+            image_dict[key].append(i)
+            vessel_dict[key].append(vessel_path + i.split("/")[-1])
+        else:
+            image_dict[key] = [i]
+            vessel_dict[key] = [vessel_path + i.split("/")[-1]]
+    return image_path, image_dict, vessel_dict, wide_fp_matched_list, wide_vessel_matched_list
+
 #fork
 if __name__ == '__main__':
     import yaml
@@ -511,17 +537,18 @@ if __name__ == '__main__':
     # # merged = P.align_image_pair_vessel(f1, f2, vessel_f1, vessel_f2)
     # plt.imsave('./code/SuperRetina-snubh/fundus-wide-preproc.png', merged)
 
-    dataset = 'widefp_vessel'
+    dataset = 'widefp_vessel_aux'
     os.makedirs('./experiment/processing/{}/'.format(dataset), exist_ok = True)
-    image_path, image_dict, vessel_dict,matched_image_list, matched_vessel_list = wide_fp_load()
+    # image_path, image_dict, vessel_dict,matched_image_list, matched_vessel_list = wide_fp_load()
+    image_path, image_dict, vessel_dict,matched_image_list, matched_vessel_list = wide_fp_aux_load()
     for idx, i in enumerate(image_dict.keys()):
         if image_dict.__len__() < 2:
             continue
 
         f2 = image_dict[i][0]
-        f1 = image_dict[i][-1]
+        # f1 = image_dict[i][-1]
         matched_f1 = matched_image_list[idx]
-        matched_f1_vessel= matched_vessel_list[idx]
+        matched_f1_vessel = matched_vessel_list[idx]
 
         vessel_f2 = vessel_dict[i][0]
         vessel_f1 = vessel_dict[i][-1]
@@ -529,23 +556,27 @@ if __name__ == '__main__':
         # P.match(f1, f2, show=True, keypoint_option = 'superretina')
         P.keypoint_option = 'superretina'
         superretina_merged = P.align_image_pair(matched_f1_vessel, vessel_f2)
-        superretina_vessel_merged, supreretina_merged_bspline, superretina_align_wide_fundus = P.align_image_pair_vessel(matched_f1_vessel, vessel_f2, matched_f1, f2)
+        superretina_vessel_merged, supreretina_merged_bspline, superretina_rigid_vessel, superretina_rigid_fundus, superretina_bsplined_vessel, superretina_align_wide_fundus = P.align_image_pair_vessel(matched_f1_vessel, vessel_f2, matched_f1, f2)
         # P.match(f1, f2, show=True, keypoint_option = 'sift')
         P.keypoint_option = 'sift'
         sift_merged = P.align_image_pair(matched_f1_vessel, vessel_f2)
-        sift_vessel_merged, sift_merged_bspline, sift_align_wide_fundus = P.align_image_pair_vessel(matched_f1_vessel, vessel_f2, matched_f1, f2)
+        sift_vessel_merged, sift_merged_bspline, _, _, sift_bsplined_vessel, sift_align_wide_fundus = P.align_image_pair_vessel(matched_f1_vessel, vessel_f2, matched_f1, f2)
         # if merged == None:
         #     continue
         # merged = P.align_image_pair_vessel(f1, f2, vessel_f1, vessel_f2)
         # plt.imsave('./experiment/processing/jeju/{}_superretina.jpg'.format(i), merged)
         try:
+            num = i
+            # num = i[:-4]
             plt.imsave('./experiment/processing/{}/{}_superretina.jpg'.format(dataset,i), superretina_merged)
-            plt.imsave('./experiment/processing/{}/{}_superretina_vessel.jpg'.format(dataset,i), superretina_vessel_merged)
-            plt.imsave('./experiment/processing/{}/{}_superretina_bsplined_vessel.jpg'.format(dataset,i), supreretina_merged_bspline)
+            plt.imsave('./experiment/processing/{}/{}_superretina_vessel.jpg'.format(dataset,i), supreretina_merged_bspline)
+            plt.imsave('./experiment/processing/{}/{}_superretina_rigid_vessel.jpg'.format(dataset,i), superretina_rigid_vessel)
+            plt.imsave('./experiment/processing/{}/{}_superretina_rigid_fundus.jpg'.format(dataset,i), superretina_rigid_fundus)
+            plt.imsave('./experiment/processing/{}/{}_superretina_bsplined_vessel.jpg'.format(dataset,i), superretina_bsplined_vessel)
             plt.imsave('./experiment/processing/{}/{}_superretina_bsplined_fundus.jpg'.format(dataset,i), superretina_align_wide_fundus)
             plt.imsave('./experiment/processing/{}/{}_sift.jpg'.format(dataset,i), sift_merged)
-            plt.imsave('./experiment/processing/{}/{}_sift_vessel.jpg'.format(dataset,i), sift_vessel_merged)
-            plt.imsave('./experiment/processing/{}/{}_sift_bsplined_vessel.jpg'.format(dataset,i), sift_merged_bspline)
+            plt.imsave('./experiment/processing/{}/{}_sift_vessel.jpg'.format(dataset,i), sift_merged_bspline)
+            plt.imsave('./experiment/processing/{}/{}_sift_bsplined_vessel.jpg'.format(dataset,i), sift_bsplined_vessel)
             plt.imsave('./experiment/processing/{}/{}_sift_bsplined_fundus.jpg'.format(dataset,i), sift_align_wide_fundus)
         except:
             continue

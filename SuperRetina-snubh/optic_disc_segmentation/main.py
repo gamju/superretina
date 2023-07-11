@@ -33,6 +33,8 @@ from keras.optimizers import SGD, Adam
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler, ReduceLROnPlateau, CSVLogger
 from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 def tf_to_th_encoding(X):
     return np.rollaxis(X, 3, 1)
@@ -129,11 +131,11 @@ def find_disc_center(image):
     fp_max_arg = np.argmax(fp_stats[1:,-1]) + 1
     fp_disc_mask = (fp_label == fp_max_arg)
     x,y,w,h,_ = fp_stats[fp_max_arg].copy()*3
-    fp_disc_center = (y+int(h/2.), x+int(w/2.))
+    fp_disc_center = [y+int(h/2.), x+int(w/2.)]
     return fp_disc_center
 
 
-def disc_matching(fp_path, widefp_path, wide_vessel_path, model):
+def disc_matching(fp_path, widefp_path, wide_vessel_path, model, padding_option = True):
     fp = Image.open(fp_path)
     fp_disc_seg = find_disc_segmentation(model, fp)
     fp_center = find_disc_center(fp_disc_seg)
@@ -142,6 +144,15 @@ def disc_matching(fp_path, widefp_path, wide_vessel_path, model):
     wide_vessel = Image.open(wide_vessel_path)
     widefp_disc_seg = find_disc_segmentation(model, wide_fp)
     widefp_center = find_disc_center(widefp_disc_seg)
+    # if padding_option == True:
+        #padding option
+        # wide_fp_padding = np.zeros([wide_fp.size[0]*2, wide_fp.size[1]*2, 3]).astype(np.uint8)
+        # wide_fp_padding[int(wide_fp_padding.shape[0]/4):int(wide_fp_padding.shape[0]/4) + wide_fp.size[0], int(wide_fp_padding.shape[1]/4):int(wide_fp_padding.shape[1]/4) + wide_fp.size[1]] = np.array(wide_fp)
+        # widefp_center[0] = widefp_center[0] + int(wide_fp_padding.shape[0]/4)
+        # widefp_center[1] = widefp_center[1] + int(wide_fp_padding.shape[0]/4)
+        
+        # wide_fp_moving = persepctive_matrix_rect((80, 80), (105, 127), widefp_center, fp_center, wide_fp_padding)
+
     wide_fp_moving = persepctive_matrix_rect((80, 80), (105, 127), widefp_center, fp_center, np.array(wide_fp))
     wide_vessel_moving = persepctive_matrix_rect((80, 80), (105, 127), widefp_center, fp_center, np.array(wide_vessel))
     return wide_fp_moving, wide_vessel_moving
@@ -162,6 +173,22 @@ def wide_fp_load():
             vessel_dict[key] = [vessel_path + i.split("/")[-1]]
     return image_path, image_dict, vessel_dict
 
+def wide_fp_aux_load():
+    image_path = "./data/Auxiliary/"
+    vessel_path = "./data/Auxiliary_Ves/"
+    image_dict = {}
+    vessel_dict = {}
+    image_list = sorted(glob.glob(image_path + "*.png"))
+    for i in image_list:
+        key = i.split("/")[-1].split("_")[0]
+        if key in image_dict:
+            image_dict[key].append(i)
+            vessel_dict[key].append(vessel_path + i.split("/")[-1])
+        else:
+            image_dict[key] = [i]
+            vessel_dict[key] = [vessel_path + i.split("/")[-1]]
+    return image_path, image_dict, vessel_dict
+
 def main():
     print('Keras version:', keras.__version__)
     print('TensorFlow version:', tf.__version__)
@@ -169,10 +196,10 @@ def main():
     model = get_unet_light(img_rows=256, img_cols=256)
     # h5f = h5py.File(os.path.join(os.path.dirname(os.getcwd()), 'data', 'hdf5_datasets', 'DRIONS_DB.hdf5'), 'r')
     model.load_weights("./code/SuperRetina-snubh/optic_disc_segmentation/last_checkpoint.hdf5")
-    image_path, image_dict, vessel_dict = wide_fp_load()
-    matched_image_path = "./data/Lab/wide_disc_matching/"
+    image_path, image_dict, vessel_dict = wide_fp_aux_load()
+    matched_image_path = "./data/Lab/Auxaility/"
     os.makedirs(matched_image_path, exist_ok = True)
-    matched_gray_path = "./data/Lab_Ves/wide_disc_matching/"
+    matched_gray_path = "./data/Lab_Ves/Auxaility/"
     os.makedirs(matched_gray_path, exist_ok = True)
     for i in image_dict.keys():
         if image_dict.__len__() < 2:
